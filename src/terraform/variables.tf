@@ -1,6 +1,6 @@
 variable "vpc_identifier" {
-  description = "The user-defined name for the Virtual Private Cloud (VPC)"
-  type        = string
+  description =  "The user-defined name for the Virtual Private Cloud (VPC)"
+  type        =  string
 }
 
 variable "vpc_cidr_block" {
