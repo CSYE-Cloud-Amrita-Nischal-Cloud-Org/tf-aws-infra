@@ -51,3 +51,18 @@ variable "aws_current_region" {
   type        = string
 }
 
+variable "ami_id" {
+  description = "AMI id of the instance to be used"
+  type        = string
+}
+
+variable "ec2_instance_type" {
+  description = "EC2 instance type"
+  type        = string
+  default     = "t2.micro"
+}
+
+variable "ssh_key_name" {
+  description = "SSH key name"
+  type        = string
+}
