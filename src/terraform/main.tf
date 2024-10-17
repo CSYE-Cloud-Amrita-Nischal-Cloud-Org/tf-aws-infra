@@ -115,7 +115,12 @@ resource "aws_security_group" "instance_sg" {
 
 # AWS Instance Block
 resource "aws_instance" "my_instance" {
-  ami                         = var.ami_id
+  ami = var.ami_id
+  root_block_device {
+    volume_size = var.volume_size # Set the root volume size to 25 GB
+    volume_type = var.volume_type # Set the root volume type to General Purpose SSD (GP2)
+  }
+  disable_api_termination     = false
   instance_type               = var.ec2_instance_type
   subnet_id                   = aws_subnet.public_subnets[0].id
   vpc_security_group_ids      = [aws_security_group.instance_sg.id]

@@ -21,9 +21,11 @@ jobs:
 
       - name: Intialize Terraform
         run: terraform init
+        working-directory: src/terraform
 
       - name: Check lint
         run: terraform fmt -check -recursive
+        working-directory: src/terraform
 
       - name: Validate Terraform
         run: terraform validate

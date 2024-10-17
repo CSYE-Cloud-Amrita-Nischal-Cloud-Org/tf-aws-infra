@@ -66,3 +66,14 @@ variable "ssh_key_name" {
   description = "SSH key name"
   type        = string
 }
+
+variable "volume_size" {
+  description = "The size of the root volume in GB"
+  type        = number
+}
+
+variable "volume_type" {
+  description = "The type of the root volume"
+  type        = string
+}
+
