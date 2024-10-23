@@ -77,3 +77,18 @@ variable "volume_type" {
   type        = string
 }
 
+variable "db_username" {
+  description = "The type of the root volume"
+  type        = string
+}
+
+variable "db_password" {
+  description = "The type of the root volume"
+  type        = string
+}
+
+variable "db_name" {
+  description = "The type of the root volume"
+  type        = string
+}
+

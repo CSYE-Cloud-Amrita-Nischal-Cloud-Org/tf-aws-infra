@@ -116,17 +116,108 @@ resource "aws_security_group" "instance_sg" {
 # AWS Instance Block
 resource "aws_instance" "my_instance" {
   ami = var.ami_id
+
   root_block_device {
-    volume_size = var.volume_size # Set the root volume size to 25 GB
-    volume_type = var.volume_type # Set the root volume type to General Purpose SSD (GP2)
+    volume_size           = var.volume_size # Set the root volume size to 25 GB
+    volume_type           = var.volume_type # Set the root volume type to General Purpose SSD (GP2)
+    delete_on_termination = true
   }
+
   disable_api_termination     = false
   instance_type               = var.ec2_instance_type
   subnet_id                   = aws_subnet.public_subnets[0].id
   vpc_security_group_ids      = [aws_security_group.instance_sg.id]
   associate_public_ip_address = true
   key_name                    = var.ssh_key_name
+  depends_on                  = [aws_db_instance.my_postgres_db]
+
+  user_data = <<EOF
+#!/bin/bash
+echo "# App Environment Variables"
+echo "DB_URL=jdbc:postgresql://${aws_db_instance.my_postgres_db.address}:5432/${var.db_name}?useSSL=false&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC" >> /etc/environment
+echo "DB_USERNAME=${var.db_username}" >> /etc/environment
+echo "DB_PASSWORD=${var.db_password}" >> /etc/environment
+
+sudo systemctl enable --now app.service
+EOF
+
   tags = {
     Name = "Java Application Instance"
+  }
+}
+
+// Database Security Group for PostgreSQL
+resource "aws_security_group" "db_sg" {
+  vpc_id = aws_vpc.my_vpc.id
+
+  // Ingress rule to allow PostgreSQL traffic (port 5432) from the application security group
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.instance_sg.id]
+    description     = "Allow PostgreSQL traffic from application security group"
+  }
+
+  // Egress rule to allow all outbound traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "PostgreSQL Database Security Group"
+  }
+}
+
+// RDS Parameter Group for PostgreSQL
+resource "aws_db_parameter_group" "postgresql_parameter_group" {
+  name        = "custom-postgres-parameter-group"
+  family      = "postgres13" # Update based on PostgreSQL version
+  description = "Custom PostgreSQL parameter group"
+
+  parameter {
+    name         = "max_connections"
+    value        = "200"
+    apply_method = "pending-reboot"
+  }
+
+  tags = {
+    Name = "Custom PostgreSQL Parameter Group"
+  }
+}
+
+// RDS Instance for PostgreSQL
+resource "aws_db_instance" "my_postgres_db" {
+  db_name                = var.db_name
+  allocated_storage      = 20
+  engine                 = "postgres"
+  engine_version         = "13"
+  instance_class         = "db.t3.micro"
+  identifier             = var.db_name
+  username               = var.db_username
+  password               = var.db_password
+  parameter_group_name   = aws_db_parameter_group.postgresql_parameter_group.name # Associate custom parameter group
+  db_subnet_group_name   = aws_db_subnet_group.my_db_subnet_group.name
+  vpc_security_group_ids = [aws_security_group.db_sg.id]
+
+  publicly_accessible = false # Set public accessibility to false
+  multi_az            = false # No multi-AZ deployment
+  skip_final_snapshot = true
+
+  tags = {
+    Name = "csye6225"
+  }
+}
+
+// DB Subnet Group for RDS instance
+resource "aws_db_subnet_group" "my_db_subnet_group" {
+  name       = "my-db-subnet-group"
+  subnet_ids = aws_subnet.private_subnets[*].id
+
+  tags = {
+    Name = "MyDBSubnetGroup"
   }
 }
