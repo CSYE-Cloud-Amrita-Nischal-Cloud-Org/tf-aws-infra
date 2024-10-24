@@ -118,8 +118,8 @@ resource "aws_instance" "my_instance" {
   ami = var.ami_id
 
   root_block_device {
-    volume_size           = var.volume_size # Set the root volume size to 25 GB
-    volume_type           = var.volume_type # Set the root volume type to General Purpose SSD (GP2)
+    volume_size           = var.volume_size 
+    volume_type           = var.volume_type 
     delete_on_termination = true
   }
 
@@ -138,7 +138,8 @@ echo "DB_URL=jdbc:postgresql://${aws_db_instance.my_postgres_db.address}:5432/${
 echo "DB_USERNAME=${var.db_username}" >> /etc/environment
 echo "DB_PASSWORD=${var.db_password}" >> /etc/environment
 
-sudo systemctl enable --now app.service
+sudo systemctl daemon-reload
+sudo systemctl restart app.service
 EOF
 
   tags = {
@@ -175,7 +176,7 @@ resource "aws_security_group" "db_sg" {
 // RDS Parameter Group for PostgreSQL
 resource "aws_db_parameter_group" "postgresql_parameter_group" {
   name        = "custom-postgres-parameter-group"
-  family      = "postgres13" # Update based on PostgreSQL version
+  family      = var.rds_parameter_group_family
   description = "Custom PostgreSQL parameter group"
 
   parameter {
@@ -192,19 +193,19 @@ resource "aws_db_parameter_group" "postgresql_parameter_group" {
 // RDS Instance for PostgreSQL
 resource "aws_db_instance" "my_postgres_db" {
   db_name                = var.db_name
-  allocated_storage      = 20
-  engine                 = "postgres"
-  engine_version         = "13"
-  instance_class         = "db.t3.micro"
+  allocated_storage      = var.rds_allocated_storage
+  engine                 = var.db_engine
+  engine_version         = var.db_engine_version
+  instance_class         = var.rds_instance_class
   identifier             = var.db_name
   username               = var.db_username
   password               = var.db_password
-  parameter_group_name   = aws_db_parameter_group.postgresql_parameter_group.name # Associate custom parameter group
+  parameter_group_name   = aws_db_parameter_group.postgresql_parameter_group.name 
   db_subnet_group_name   = aws_db_subnet_group.my_db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
 
-  publicly_accessible = false # Set public accessibility to false
-  multi_az            = false # No multi-AZ deployment
+  publicly_accessible = false 
+  multi_az            = false 
   skip_final_snapshot = true
 
   tags = {

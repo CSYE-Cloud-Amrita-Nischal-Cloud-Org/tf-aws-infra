@@ -78,17 +78,41 @@ variable "volume_type" {
 }
 
 variable "db_username" {
-  description = "The type of the root volume"
+  description = "Database Username"
   type        = string
 }
 
 variable "db_password" {
-  description = "The type of the root volume"
+  description = "Database Password"
   type        = string
 }
 
 variable "db_name" {
-  description = "The type of the root volume"
+  description = "Database Name"
   type        = string
 }
 
+variable "db_engine" {
+  description = "Database Engine"
+  type        = string
+}
+
+variable "db_engine_version" {
+  description = "Database Engine Version"
+  type        = string
+}
+
+variable "rds_instance_class" {
+  description = "RDS Instance class"
+  type        = string
+}
+
+variable "rds_allocated_storage" {
+  description = "RDS Allocated Storage"
+  type        = string
+}
+
+variable "rds_parameter_group_family" {
+  description = "RDS Allocated Storage"
+  type        = string
+}
