@@ -118,8 +118,8 @@ resource "aws_instance" "my_instance" {
   ami = var.ami_id
 
   root_block_device {
-    volume_size           = var.volume_size 
-    volume_type           = var.volume_type 
+    volume_size           = var.volume_size
+    volume_type           = var.volume_type
     delete_on_termination = true
   }
 
@@ -200,12 +200,12 @@ resource "aws_db_instance" "my_postgres_db" {
   identifier             = var.db_name
   username               = var.db_username
   password               = var.db_password
-  parameter_group_name   = aws_db_parameter_group.postgresql_parameter_group.name 
+  parameter_group_name   = aws_db_parameter_group.postgresql_parameter_group.name
   db_subnet_group_name   = aws_db_subnet_group.my_db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
 
-  publicly_accessible = false 
-  multi_az            = false 
+  publicly_accessible = false
+  multi_az            = false
   skip_final_snapshot = true
 
   tags = {
