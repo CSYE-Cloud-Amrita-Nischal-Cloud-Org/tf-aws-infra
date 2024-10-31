@@ -141,6 +141,8 @@ echo "DB_PASSWORD=${var.db_password}" >> /etc/environment
 echo "AWS_S3_BUCKET_NAME=${aws_s3_bucket.csye6225-bucket.bucket}" >> /etc/environment
 echo "AWS_REGION=${var.aws_current_region}" >> /etc/environment
 
+sudo truncate -s 0 /opt/webapp/logs/webapp.log
+
 sudo systemctl daemon-reload
 sudo systemctl restart app.service
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
