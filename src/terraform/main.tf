@@ -295,22 +295,22 @@ output "bucket_name" {
 
 # Route 53 Zone Data
 data "aws_route53_zone" "selected_zone" {
-  name         = "dev.amritanischal.me"
+  name         = var.selected_zone_name
   private_zone = false
 }
 
 # Route 53 A Record pointing to EC2 instance IP
-resource "aws_route53_record" "dev_domain" {
+resource "aws_route53_record" "domain_name" {
   zone_id = data.aws_route53_zone.selected_zone.zone_id
-  name    = "dev.amritanischal.me"
-  type    = "A"
+  name    = var.domain_name
+  type    = var.record_type
   ttl     = 60
   records = [aws_instance.my_instance.public_ip]
 
 }
 
 output "domain_name" {
-  value = aws_route53_record.dev_domain.fqdn
+  value = aws_route53_record.domain_name.fqdn
 }
 
 # IAM Role for CloudWatch Agent
