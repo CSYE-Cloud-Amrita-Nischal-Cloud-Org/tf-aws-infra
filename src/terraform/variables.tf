@@ -113,6 +113,21 @@ variable "rds_allocated_storage" {
 }
 
 variable "rds_parameter_group_family" {
-  description = "RDS Allocated Storage"
+  description = "RDS parameter group family"
+  type        = string
+}
+
+variable "selected_zone_name" {
+  description = "Name of selected zone"
+  type        = string
+}
+
+variable "domain_name" {
+  description = "Name of the domain"
+  type        = string
+}
+
+variable "record_type" {
+  description = "Type of record added"
   type        = string
 }
