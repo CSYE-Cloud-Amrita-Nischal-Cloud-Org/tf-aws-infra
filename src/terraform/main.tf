@@ -129,7 +129,8 @@ resource "aws_instance" "my_instance" {
   vpc_security_group_ids      = [aws_security_group.instance_sg.id]
   associate_public_ip_address = true
   key_name                    = var.ssh_key_name
-  depends_on                  = [aws_db_instance.my_postgres_db]
+  depends_on                  = [aws_db_instance.my_postgres_db, aws_s3_bucket.csye6225-bucket]
+  iam_instance_profile        = aws_iam_instance_profile.cloudwatch_instance_profile.name
 
   user_data = <<EOF
 #!/bin/bash
@@ -137,9 +138,16 @@ echo "# App Environment Variables"
 echo "DB_URL=jdbc:postgresql://${aws_db_instance.my_postgres_db.address}:5432/${var.db_name}?useSSL=false&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC" >> /etc/environment
 echo "DB_USERNAME=${var.db_username}" >> /etc/environment
 echo "DB_PASSWORD=${var.db_password}" >> /etc/environment
+echo "AWS_S3_BUCKET_NAME=${aws_s3_bucket.csye6225-bucket.bucket}" >> /etc/environment
+echo "AWS_REGION=${var.aws_current_region}" >> /etc/environment
 
 sudo systemctl daemon-reload
 sudo systemctl restart app.service
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+             -a fetch-config \
+             -m ec2 \
+             -c file:/opt/aws/amazon-cloudwatch-agent/bin/cloudwatch-config.json \
+             -s
 EOF
 
   tags = {
@@ -222,3 +230,121 @@ resource "aws_db_subnet_group" "my_db_subnet_group" {
     Name = "MyDBSubnetGroup"
   }
 }
+
+# Generate a unique UUID for the S3 bucket name
+resource "random_uuid" "bucket_name" {}
+
+# Create the S3 bucket with UUID as its name
+resource "aws_s3_bucket" "csye6225-bucket" {
+  bucket = random_uuid.bucket_name.result
+
+  # Enable force destroy to delete non-empty buckets
+  force_destroy = true
+}
+
+# Configure server-side encryption using a separate resource
+resource "aws_s3_bucket_server_side_encryption_configuration" "csye6225-bucket_encryption" {
+  bucket = aws_s3_bucket.csye6225-bucket.bucket
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# Add a bucket policy to make it private and enforce HTTPS
+resource "aws_iam_policy" "csye6225-bucket_policy" {
+  name = "bucket_policy"
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Effect" : "Allow",
+        "Action" : [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListAllMyBuckets"
+        ],
+        "Resource" : "${aws_s3_bucket.csye6225-bucket.arn}/*",
+      }
+    ]
+  })
+}
+
+# Lifecycle configuration for transitioning objects
+resource "aws_s3_bucket_lifecycle_configuration" "csye6225-bucket_lifecycle" {
+  bucket = aws_s3_bucket.csye6225-bucket.bucket
+
+  rule {
+    id     = "transition-to-ia"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+  }
+}
+
+# Output the generated bucket name
+output "bucket_name" {
+  value = aws_s3_bucket.csye6225-bucket.bucket
+}
+
+# Route 53 Zone Data
+data "aws_route53_zone" "selected_zone" {
+  name         = "dev.amritanischal.me"
+  private_zone = false
+}
+
+# Route 53 A Record pointing to EC2 instance IP
+resource "aws_route53_record" "dev_domain" {
+  zone_id = data.aws_route53_zone.selected_zone.zone_id
+  name    = "dev.amritanischal.me"
+  type    = "A"
+  ttl     = 60
+  records = [aws_instance.my_instance.public_ip]
+
+}
+
+output "domain_name" {
+  value = aws_route53_record.dev_domain.fqdn
+}
+
+# IAM Role for CloudWatch Agent
+resource "aws_iam_role" "cloudwatch_agent_role" {
+  name = "CloudWatchAgentRole"
+
+  assume_role_policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Effect" : "Allow",
+        "Principal" : {
+          "Service" : "ec2.amazonaws.com"
+        },
+        "Action" : "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+# Attach CloudWatch and SSM Policies to Role
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy" {
+  role       = aws_iam_role.cloudwatch_agent_role.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "s3_policy" {
+  role       = aws_iam_role.cloudwatch_agent_role.name
+  policy_arn = aws_iam_policy.csye6225-bucket_policy.arn
+}
+
+# Instance Profile for EC2
+resource "aws_iam_instance_profile" "cloudwatch_instance_profile" {
+  name = "CloudWatchAgentInstanceProfile"
+  role = aws_iam_role.cloudwatch_agent_role.name
+}
+
