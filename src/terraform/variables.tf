@@ -131,3 +131,183 @@ variable "record_type" {
   description = "Type of record added"
   type        = string
 }
+
+variable "aws_launch_template_name" {
+  description = "Name of the aws launch lemplate"
+  type        = string
+}
+
+variable "aws_lb_name" {
+  description = "Name of the aws load balancer"
+  type        = string
+}
+
+variable "load_balancer_type" {
+  description = "Type of the aws load balancer"
+  type        = string
+}
+
+variable "aws_lb_target_group" {
+  description = "Name of the aws load balancer target group"
+  type        = string
+}
+
+variable "target_group_port" {
+  description = "Port number for target group"
+  type        = number
+}
+
+variable "target_group_protocol" {
+  description = "Protocol"
+  type        = string
+}
+
+variable "health_check_path" {
+  description = "Path for health check"
+  type        = string
+}
+
+variable "health_check_interval" {
+  description = "Interval for health check"
+  type        = number
+}
+
+variable "health_check_timeout" {
+  description = "Time out for health check"
+  type        = number
+}
+
+variable "health_check_healthy_threshold" {
+  description = "Healthy threshold for health check"
+  type        = number
+}
+
+variable "health_check_unhealthy_threshold" {
+  description = "Unhealthy threshold for health check"
+  type        = number
+}
+
+variable "health_check_matcher" {
+  description = "Status code for healthz"
+  type        = string
+}
+
+variable "aws_lb_listener_port" {
+  description = "Load balancer listerner port"
+  type        = number
+}
+
+variable "aws_lb_listener_protocol" {
+  description = "Load balancer listener protocol"
+  type        = string
+}
+
+variable "scale_up_policy_name" {
+  description = "Scale up policy name"
+  type        = string
+}
+
+variable "scale_down_policy_name" {
+  description = "Scale down policy name"
+  type        = string
+}
+
+variable "scale_up_adjustment" {
+  description = "Scale up adjustement"
+  type        = number
+}
+
+variable "scale_down_adjustment" {
+  description = "Scale down adjustement"
+  type        = number
+}
+
+variable "cooldown_period" {
+  description = "Cooldown Period"
+  type        = number
+}
+
+variable "adjustment_type" {
+  description = "Adjustment type"
+  type        = string
+}
+
+variable "high_cpu_alarm_name" {
+  description = "High CPU alarm name"
+  type        = string
+}
+
+variable "low_cpu_alarm_name" {
+  description = "Low CPU alarm name"
+  type        = string
+}
+
+variable "low_cpu_comparison_operator" {
+  description = "Low CPU comparision operator"
+  type        = string
+}
+
+variable "high_cpu_comparison_operator" {
+  description = "High CPU comparision operator"
+  type        = string
+}
+
+variable "cpu_utilization_metric_name" {
+  description = "Cpu utilization metric name"
+  type        = string
+}
+
+variable "autoscaling_group_min_size" {
+  description = "Autoscaling group min size"
+  type        = number
+}
+
+variable "autoscaling_group_max_size" {
+  description = "Autoscaling group max size"
+  type        = number
+}
+
+variable "autoscaling_group_desired_size" {
+  description = "Autoscaling group desired size"
+  type        = number
+}
+
+variable "autoscaling_statistic" {
+  description = "Autoscaling statistic"
+  type        = string
+}
+
+variable "autoscaling_period" {
+  description = "Autoscaling period"
+  type        = number
+}
+
+variable "autoscaling_namespace" {
+  description = "Autoscaling namespace"
+  type        = string
+}
+
+variable "autoscaling_evaluation_periods" {
+  description = "Autoscaling evaluation periods"
+  type        = number
+}
+
+variable "scale_up_threshold" {
+  description = "Autoscaling scale up threshold"
+  type        = number
+}
+
+variable "scale_down_threshold" {
+  description = "Autoscaling scale down threshold"
+  type        = number
+}
+
+variable "autoscaling_group_health_check_type" {
+  description = "Autoscaling group health check type"
+  type        = string
+}
+
+variable "autoscaling_group_health_check_grace_period" {
+  description = "Autoscaling group health grace period"
+  type        = number
+}

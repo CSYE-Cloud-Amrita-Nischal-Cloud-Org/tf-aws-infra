@@ -70,37 +70,29 @@ resource "aws_route_table_association" "private_association" {
   route_table_id = aws_route_table.private_routing_table.id
 }
 
+// Updated EC2 Security Group for Application Instances
 resource "aws_security_group" "instance_sg" {
   vpc_id = aws_vpc.my_vpc.id
 
+  // Allow SSH access from the Load Balancer Security Group only
   ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.load_balancer_sg.id]
+    description     = "Allow SSH from Load Balancer Security Group"
   }
 
+  // Allow application traffic (e.g., HTTP/HTTPS) from the Load Balancer Security Group only
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.load_balancer_sg.id]
+    description     = "Allow app traffic from Load Balancer Security Group"
   }
 
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
+  // Egress rule to allow all outbound traffic
   egress {
     from_port   = 0
     to_port     = 0
@@ -110,50 +102,6 @@ resource "aws_security_group" "instance_sg" {
 
   tags = {
     Name = "application security group"
-  }
-}
-
-# AWS Instance Block
-resource "aws_instance" "my_instance" {
-  ami = var.ami_id
-
-  root_block_device {
-    volume_size           = var.volume_size
-    volume_type           = var.volume_type
-    delete_on_termination = true
-  }
-
-  disable_api_termination     = false
-  instance_type               = var.ec2_instance_type
-  subnet_id                   = aws_subnet.public_subnets[0].id
-  vpc_security_group_ids      = [aws_security_group.instance_sg.id]
-  associate_public_ip_address = true
-  key_name                    = var.ssh_key_name
-  depends_on                  = [aws_db_instance.my_postgres_db, aws_s3_bucket.csye6225-bucket]
-  iam_instance_profile        = aws_iam_instance_profile.cloudwatch_instance_profile.name
-
-  user_data = <<EOF
-#!/bin/bash
-echo "# App Environment Variables"
-echo "DB_URL=jdbc:postgresql://${aws_db_instance.my_postgres_db.address}:5432/${var.db_name}?useSSL=false&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC" >> /etc/environment
-echo "DB_USERNAME=${var.db_username}" >> /etc/environment
-echo "DB_PASSWORD=${var.db_password}" >> /etc/environment
-echo "AWS_S3_BUCKET_NAME=${aws_s3_bucket.csye6225-bucket.bucket}" >> /etc/environment
-echo "AWS_REGION=${var.aws_current_region}" >> /etc/environment
-
-sudo truncate -s 0 /opt/webapp/logs/webapp.log
-
-sudo systemctl daemon-reload
-sudo systemctl restart app.service
-sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-             -a fetch-config \
-             -m ec2 \
-             -c file:/opt/aws/amazon-cloudwatch-agent/bin/cloudwatch-config.json \
-             -s
-EOF
-
-  tags = {
-    Name = "Java Application Instance"
   }
 }
 
@@ -301,20 +249,6 @@ data "aws_route53_zone" "selected_zone" {
   private_zone = false
 }
 
-# Route 53 A Record pointing to EC2 instance IP
-resource "aws_route53_record" "domain_name" {
-  zone_id = data.aws_route53_zone.selected_zone.zone_id
-  name    = var.domain_name
-  type    = var.record_type
-  ttl     = 60
-  records = [aws_instance.my_instance.public_ip]
-
-}
-
-output "domain_name" {
-  value = aws_route53_record.domain_name.fqdn
-}
-
 # IAM Role for CloudWatch Agent
 resource "aws_iam_role" "cloudwatch_agent_role" {
   name = "CloudWatchAgentRole"
@@ -349,4 +283,214 @@ resource "aws_iam_instance_profile" "cloudwatch_instance_profile" {
   name = "CloudWatchAgentInstanceProfile"
   role = aws_iam_role.cloudwatch_agent_role.name
 }
+
+// Load Balancer Security Group
+resource "aws_security_group" "load_balancer_sg" {
+  vpc_id = aws_vpc.my_vpc.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow HTTP from port 80"
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow HTTPS traffic from anywhere"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "Load Balancer Security Group"
+  }
+}
+
+# Launch Template for Auto Scaling Group
+resource "aws_launch_template" "csye6225_launch_template" {
+  name          = var.aws_launch_template_name
+  image_id      = var.ami_id
+  instance_type = var.ec2_instance_type
+  key_name      = var.ssh_key_name
+  iam_instance_profile {
+    name = aws_iam_instance_profile.cloudwatch_instance_profile.name
+  }
+
+  # Define network interface with security groups and public IP association
+  network_interfaces {
+    associate_public_ip_address = true
+    delete_on_termination       = true
+    security_groups             = [aws_security_group.instance_sg.id]
+  }
+
+  user_data = base64encode(<<EOF
+#!/bin/bash
+echo "# App Environment Variables"
+echo "DB_URL=jdbc:postgresql://${aws_db_instance.my_postgres_db.address}:5432/${var.db_name}?useSSL=false&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC" >> /etc/environment
+echo "DB_USERNAME=${var.db_username}" >> /etc/environment
+echo "DB_PASSWORD=${var.db_password}" >> /etc/environment
+echo "AWS_S3_BUCKET_NAME=${aws_s3_bucket.csye6225-bucket.bucket}" >> /etc/environment
+echo "AWS_REGION=${var.aws_current_region}" >> /etc/environment
+
+sudo truncate -s 0 /opt/webapp/logs/webapp.log
+
+sudo systemctl daemon-reload
+sudo systemctl restart app.service
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+             -a fetch-config \
+             -m ec2 \
+             -c file:/opt/aws/amazon-cloudwatch-agent/bin/cloudwatch-config.json \
+             -s
+EOF
+  )
+}
+
+# Application Load Balancer
+resource "aws_lb" "app_load_balancer" {
+  name               = var.aws_lb_name
+  internal           = false
+  load_balancer_type = var.load_balancer_type
+  security_groups    = [aws_security_group.load_balancer_sg.id]
+  subnets            = aws_subnet.public_subnets[*].id
+
+  tags = {
+    Name = "Application Load Balancer"
+  }
+}
+
+# Target Group for Auto Scaling Group Instances
+resource "aws_lb_target_group" "target_group" {
+  name     = var.aws_lb_target_group
+  port     = var.target_group_port
+  protocol = var.target_group_protocol
+  vpc_id   = aws_vpc.my_vpc.id
+  health_check {
+    path                = var.health_check_path
+    protocol            = var.target_group_protocol
+    port                = var.target_group_port
+    interval            = var.health_check_interval
+    timeout             = var.health_check_timeout
+    healthy_threshold   = var.health_check_healthy_threshold
+    unhealthy_threshold = var.health_check_unhealthy_threshold
+    matcher             = var.health_check_matcher
+  }
+
+  tags = {
+    Name = "WebAppTargetGroup"
+  }
+}
+
+# Listener for Application Load Balancer
+resource "aws_lb_listener" "app_listener" {
+  load_balancer_arn = aws_lb.app_load_balancer.arn
+  port              = var.aws_lb_listener_port
+  protocol          = var.aws_lb_listener_protocol
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.target_group.arn
+  }
+}
+
+# Auto Scaling Policies
+# Scale Up Policy
+resource "aws_autoscaling_policy" "scale_up_policy" {
+  name                   = var.scale_up_policy_name
+  scaling_adjustment     = var.scale_up_adjustment
+  adjustment_type        = var.adjustment_type
+  autoscaling_group_name = aws_autoscaling_group.csye6225_asg.name
+  cooldown               = var.cooldown_period
+}
+
+# Scale Down Policy
+resource "aws_autoscaling_policy" "scale_down_policy" {
+  name                   = var.scale_down_policy_name
+  scaling_adjustment     = var.scale_down_adjustment
+  adjustment_type        = var.adjustment_type
+  autoscaling_group_name = aws_autoscaling_group.csye6225_asg.name
+  cooldown               = var.cooldown_period
+}
+
+# CloudWatch Metric Alarms for Auto Scaling
+# Scale Up Alarm
+resource "aws_cloudwatch_metric_alarm" "high_cpu_alarm" {
+  alarm_name          = var.high_cpu_alarm_name
+  comparison_operator = var.high_cpu_comparison_operator
+  evaluation_periods  = var.autoscaling_evaluation_periods
+  metric_name         = var.cpu_utilization_metric_name
+  namespace           = var.autoscaling_namespace
+  period              = var.autoscaling_period
+  statistic           = var.autoscaling_statistic
+  threshold           = var.scale_up_threshold
+  alarm_actions       = [aws_autoscaling_policy.scale_up_policy.arn]
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.csye6225_asg.name
+  }
+}
+
+# Scale Down Alarm
+resource "aws_cloudwatch_metric_alarm" "low_cpu_alarm" {
+  alarm_name          = var.low_cpu_alarm_name
+  comparison_operator = var.low_cpu_comparison_operator
+  evaluation_periods  = var.autoscaling_evaluation_periods
+  metric_name         = var.cpu_utilization_metric_name
+  namespace           = var.autoscaling_namespace
+  period              = var.autoscaling_period
+  statistic           = var.autoscaling_statistic
+  threshold           = var.scale_down_threshold
+  alarm_actions       = [aws_autoscaling_policy.scale_down_policy.arn]
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.csye6225_asg.name
+  }
+}
+
+# Auto Scaling Group with Target Group Attachment
+resource "aws_autoscaling_group" "csye6225_asg" {
+  launch_template {
+    id      = aws_launch_template.csye6225_launch_template.id
+    version = "$Latest"
+  }
+  min_size                  = var.autoscaling_group_min_size
+  max_size                  = var.autoscaling_group_max_size
+  desired_capacity          = var.autoscaling_group_desired_size
+  vpc_zone_identifier       = aws_subnet.public_subnets[*].id
+  health_check_type         = var.autoscaling_group_health_check_type
+  health_check_grace_period = var.autoscaling_group_health_check_grace_period
+  target_group_arns         = [aws_lb_target_group.target_group.arn]
+
+  tag {
+    key                 = "Name"
+    value               = "AutoScaledJavaAppInstance"
+    propagate_at_launch = true
+  }
+
+  depends_on = [aws_lb_target_group.target_group]
+}
+
+# Route 53 A Record as Alias for ALB
+resource "aws_route53_record" "app_alias_record" {
+  zone_id = data.aws_route53_zone.selected_zone.zone_id
+  name    = var.domain_name
+  type    = var.record_type
+
+  alias {
+    name                   = aws_lb.app_load_balancer.dns_name
+    zone_id                = aws_lb.app_load_balancer.zone_id
+    evaluate_target_health = true
+  }
+
+  depends_on = [aws_lb.app_load_balancer]
+}
+
+
 
