@@ -301,7 +301,7 @@ resource "aws_iam_policy" "ec2_sns_policy" {
           "sns:ListSubscriptionsByTopic", # Allow listing subscriptions by topic
           "sns:ListTopics"                # Allow listing SNS topics
         ],
-        Resource = "arn:aws:sns:us-east-1:183631339821:*"
+        Resource = var.sns_policy_resource_name
       }
     ]
   })
