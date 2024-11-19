@@ -284,31 +284,64 @@ resource "aws_iam_instance_profile" "cloudwatch_instance_profile" {
   role = aws_iam_role.cloudwatch_agent_role.name
 }
 
+# Define a policy to allow EC2 instances to interact with SNS topics
+resource "aws_iam_policy" "ec2_sns_policy" {
+  name        = "ec2-sns-policy"
+  description = "Policy to allow EC2 instances to interact with SNS topics"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "sns:Publish",                  # Allow publishing messages to SNS
+          "sns:Subscribe",                # Allow subscribing to SNS topics
+          "sns:Unsubscribe",              # Allow unsubscribing from SNS topics
+          "sns:ListSubscriptionsByTopic", # Allow listing subscriptions by topic
+          "sns:ListTopics"                # Allow listing SNS topics
+        ],
+        Resource = "arn:aws:sns:us-east-1:183631339821:*"
+      }
+    ]
+  })
+}
+
+# Attach the SNS policy to the EC2 IAM role
+resource "aws_iam_role_policy_attachment" "ec2_sns_policy_attachment" {
+  role       = aws_iam_role.cloudwatch_agent_role.name # Use the correct IAM role for EC2 instances
+  policy_arn = aws_iam_policy.ec2_sns_policy.arn
+}
+
+
 // Load Balancer Security Group
 resource "aws_security_group" "load_balancer_sg" {
   vpc_id = aws_vpc.my_vpc.id
 
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow HTTP from port 80"
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+    description      = "Allow HTTP from port 80"
   }
 
   ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow HTTPS traffic from anywhere"
+    from_port        = 443
+    to_port          = 443
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+    description      = "Allow HTTPS traffic from anywhere"
   }
 
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
   }
 
   tags = {
@@ -341,6 +374,7 @@ echo "DB_USERNAME=${var.db_username}" >> /etc/environment
 echo "DB_PASSWORD=${var.db_password}" >> /etc/environment
 echo "AWS_S3_BUCKET_NAME=${aws_s3_bucket.csye6225-bucket.bucket}" >> /etc/environment
 echo "AWS_REGION=${var.aws_current_region}" >> /etc/environment
+echo "AWS_SNS_TOPIC_NAME=${var.aws_sns_topic_name}" >> /etc/environment
 
 sudo truncate -s 0 /opt/webapp/logs/webapp.log
 
@@ -460,6 +494,7 @@ resource "aws_autoscaling_group" "csye6225_asg" {
     id      = aws_launch_template.csye6225_launch_template.id
     version = "$Latest"
   }
+  name                      = var.auto_scaling_group_name
   min_size                  = var.autoscaling_group_min_size
   max_size                  = var.autoscaling_group_max_size
   desired_capacity          = var.autoscaling_group_desired_size
@@ -492,5 +527,93 @@ resource "aws_route53_record" "app_alias_record" {
   depends_on = [aws_lb.app_load_balancer]
 }
 
+# Creates an SNS topic
+resource "aws_sns_topic" "email_verification" {
+  name = var.aws_sns_topic_name
+}
 
+# Creates an IAM Role for Lambda Function
+resource "aws_iam_role" "lambda_iam_role" {
+  name = "lambda_iam_role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
 
+# Creates an IAM Policy for Lambda Function
+resource "aws_iam_policy" "lambda_iam_policy" {
+  name        = "lambda_iam_policy"
+  description = "Policy to grant Lambda access to SNS"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["sns:Publish", "sns:Subscribe"]
+        Resource = aws_sns_topic.email_verification.arn
+      },
+      {
+        Effect : "Allow",
+        Action : [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        Resource : "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
+
+# Attach role and policy arn to lambda
+resource "aws_iam_role_policy_attachment" "lambda_attach_role" {
+  role       = aws_iam_role.lambda_iam_role.name
+  policy_arn = aws_iam_policy.lambda_iam_policy.arn
+}
+
+# Creates Lambda function to verify email
+resource "aws_lambda_function" "email_verification_lambda" {
+  s3_bucket = var.lambda_function_s3_bucket
+  s3_key    = var.lambda_function_s3_key
+  # filename      = "${path.module}/lambda_function.zip"
+  function_name = "SendVerificationEmailFunction"
+  role          = aws_iam_role.lambda_iam_role.arn
+  handler       = "index.handler"
+  runtime       = "nodejs18.x"
+  timeout       = 15
+
+  environment {
+    variables = {
+      MAILGUN_API_KEY = var.mailgun_api_key
+      MAILGUN_DOMAIN  = var.mailgun_domain
+      APP_URL         = var.mailgun_domain
+    }
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.lambda_attach_role]
+}
+
+# Creates permissions for Lambda for SNS
+resource "aws_lambda_permission" "allow_sns" {
+  statement_id  = "AllowExecutionFromSNS"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.email_verification_lambda.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.email_verification.arn
+}
+
+# Subscirbes topic for lambda
+resource "aws_sns_topic_subscription" "lambda_subscription" {
+  topic_arn = aws_sns_topic.email_verification.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.email_verification_lambda.arn
+}
