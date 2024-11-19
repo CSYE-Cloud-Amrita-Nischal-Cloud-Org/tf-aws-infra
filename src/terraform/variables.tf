@@ -311,3 +311,33 @@ variable "autoscaling_group_health_check_grace_period" {
   description = "Autoscaling group health grace period"
   type        = number
 }
+
+variable "aws_sns_topic_name" {
+  description = "Name of the aws SNS topic"
+  type        = string
+}
+
+variable "lambda_function_s3_bucket" {
+  description = "Lambda function s3 bucket"
+  type        = string
+}
+
+variable "lambda_function_s3_key" {
+  description = "Lambda function s3 path"
+  type        = string
+}
+
+variable "mailgun_api_key" {
+  description = "Mailgun api key"
+  type        = string
+}
+
+variable "mailgun_domain" {
+  description = "Mailgun domain"
+  type        = string
+}
+
+variable "auto_scaling_group_name" {
+  description = "Auto scaling group name"
+  type        = string
+}
