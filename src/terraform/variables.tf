@@ -341,3 +341,9 @@ variable "auto_scaling_group_name" {
   description = "Auto scaling group name"
   type        = string
 }
+
+variable "sns_policy_resource_name" {
+  description = "Sns policy resource name"
+  type        = string
+}
+
