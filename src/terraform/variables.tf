@@ -347,3 +347,8 @@ variable "sns_policy_resource_name" {
   type        = string
 }
 
+variable "account_id" {
+  description = "The AWS account ID"
+  type        = string
+}
+
