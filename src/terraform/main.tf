@@ -185,6 +185,8 @@ resource "aws_db_instance" "my_postgres_db" {
   parameter_group_name   = aws_db_parameter_group.postgresql_parameter_group.name
   db_subnet_group_name   = aws_db_subnet_group.my_db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
+  storage_encrypted      = true
+  kms_key_id             = aws_kms_key.rds_kms_key.arn
 
   publicly_accessible = false
   multi_az            = false
@@ -225,7 +227,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "csye6225-bucket_e
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      kms_master_key_id = aws_kms_key.s3_kms_key.arn
+      sse_algorithm     = "aws:kms"
     }
   }
 }
@@ -683,6 +686,7 @@ resource "aws_iam_policy" "lambda_iam_policy" {
         ],
         Resource : "arn:aws:logs:*:*:*"
       },
+      # Allow Lambda to retrieve secrets from Secrets Manager
       {
         Effect : "Allow",
         Action : [
@@ -690,9 +694,13 @@ resource "aws_iam_policy" "lambda_iam_policy" {
           "secretsmanager:DescribeSecret"
         ],
         Resource : [
-          aws_secretsmanager_secret.db_credentials.arn,
           aws_secretsmanager_secret.email_config.arn
         ]
+      },
+      {
+        Effect : "Allow",
+        Action : ["kms:Decrypt"],
+        Resource : aws_kms_key.secrets_kms_key.arn
       }
     ]
   })
@@ -836,6 +844,7 @@ resource "aws_kms_key" "rds_kms_key" {
   key_usage                = "ENCRYPT_DECRYPT"
   is_enabled               = true
   enable_key_rotation      = true
+  rotation_period_in_days  = 90
 
   policy = jsonencode({
     Version = "2012-10-17",
@@ -901,10 +910,11 @@ resource "aws_kms_alias" "rds_alias" {
 }
 
 resource "aws_kms_key" "s3_kms_key" {
-  description         = "KMS key for S3"
-  key_usage           = "ENCRYPT_DECRYPT"
-  is_enabled          = true
-  enable_key_rotation = true
+  description             = "KMS key for S3"
+  key_usage               = "ENCRYPT_DECRYPT"
+  is_enabled              = true
+  enable_key_rotation     = true
+  rotation_period_in_days = 90
 
   policy = jsonencode({
     Version : "2012-10-17",
@@ -960,10 +970,11 @@ resource "aws_kms_alias" "s3_alias" {
 }
 
 resource "aws_kms_key" "secrets_kms_key" {
-  description         = "KMS key for Secrets Manager"
-  key_usage           = "ENCRYPT_DECRYPT"
-  is_enabled          = true
-  enable_key_rotation = true
+  description             = "KMS key for Secrets Manager"
+  key_usage               = "ENCRYPT_DECRYPT"
+  is_enabled              = true
+  enable_key_rotation     = true
+  rotation_period_in_days = 90
 
   policy = jsonencode({
     Version = "2012-10-17",
@@ -1057,3 +1068,4 @@ resource "aws_kms_alias" "secrets_alias" {
 output "ssl_certificate" {
   value = data.aws_acm_certificate.ssl_certificate.arn
 }
+
